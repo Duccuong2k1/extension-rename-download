@@ -35,6 +35,8 @@
     .bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13px; color: var(--muted); }
     .link { border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; padding: 0; }
     .link:focus-visible { outline: 2px solid var(--accent); }
+    .link:disabled { opacity: .45; cursor: default; }
+    .actions { display: flex; gap: 14px; }
     .grid {
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
       max-height: 264px; overflow-y: auto; margin-bottom: 12px;
@@ -69,14 +71,22 @@
     .preview b { color: var(--accent); font-weight: 600; }
     .preview span { color: var(--muted); }
 
+    .buttons { display: flex; gap: 8px; }
     #start {
-      width: 100%; padding: 11px; border: 0; border-radius: 999px;
+      flex: 1; padding: 11px; border: 0; border-radius: 999px;
       background: var(--accent); color: var(--on-accent);
       font: inherit; font-weight: 600; cursor: pointer; transition: filter .15s, opacity .15s;
     }
     #start:hover:not(:disabled) { filter: brightness(1.08); }
     #start:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
     #start:disabled { opacity: .45; cursor: default; }
+    #cancel {
+      padding: 11px 18px; border: 1px solid var(--line); border-radius: 999px;
+      background: none; color: var(--text); font: inherit; font-weight: 600; cursor: pointer;
+    }
+    #cancel[hidden] { display: none; }
+    #cancel:hover { border-color: var(--bad); color: var(--bad); }
+    #cancel:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 
     .progress { margin-top: 12px; }
     .progress[hidden] { display: none; }
@@ -96,7 +106,7 @@
   </div>
 
   <section id="panel-page" role="tabpanel" aria-labelledby="tab-page">
-    <div class="bar"><span id="count" aria-live="polite">Đang tìm ảnh trên trang…</span><button class="link" id="toggle-all" hidden>Bỏ chọn tất cả</button></div>
+    <div class="bar"><span id="count" aria-live="polite">Đang tìm ảnh trên trang…</span><span class="actions"><button class="link" id="sync" hidden title="Quét lại trang để thêm ảnh vừa hiện ra khi cuộn">↻ Cập nhật ảnh</button><button class="link" id="toggle-all" hidden>Bỏ chọn tất cả</button></span></div>
     <div class="grid" id="grid"></div>
   </section>
 
@@ -122,7 +132,10 @@
     </div>
   </div>
   <div class="preview" id="preview" aria-live="polite"></div>
-  <button id="start">Tải và đổi tên</button>
+  <div class="buttons">
+    <button id="start">Tải và đổi tên</button>
+    <button id="cancel" hidden>Hủy</button>
+  </div>
   <div class="progress" id="progress" hidden><progress id="bar" value="0" max="1"></progress></div>
   <p id="status" role="status"></p>
   <script type="module" src="popup.js"></script>

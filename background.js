@@ -1,7 +1,9 @@
 import { fileName, extFromMime } from './naming.js';
 import { fetchImage } from './fetch-image.js';
 
-let status = null; // { done, failed, total, running }
+let status = null; // { done, failed, total, running, cancelled? }
+let runId = 0; // bumped on cancel so a stalled run's late results are ignored
+let currentDownload = null;
 
 async function ensureOffscreen() {
   if (await chrome.offscreen.hasDocument()) return;
@@ -45,15 +47,20 @@ function waitDone(id) {
 const report = () => chrome.runtime.sendMessage({ type: 'progress', ...status }).catch(() => {});
 
 async function run(base, urls, tabId, format) {
+  const my = ++runId;
   status = { done: 0, failed: 0, total: urls.length, running: true };
   report();
   for (const [i, url] of urls.entries()) {
     try {
       const result = await getImage(url, format, tabId);
+      if (my !== runId) return;
       const name = fileName(base, i + 1, urls.length, extFromMime(result.mime));
-      const id = await chrome.downloads.download({ url: result.blobUrl, filename: `${base}/${name}`, conflictAction: 'uniquify' });
-      if (!(await waitDone(id))) status.failed++;
+      const id = (currentDownload = await chrome.downloads.download({ url: result.blobUrl, filename: `${base}/${name}`, conflictAction: 'uniquify' }));
+      const ok = await waitDone(id);
+      if (my !== runId) return;
+      if (!ok) status.failed++;
     } catch (e) {
+      if (my !== runId) return;
       console.warn('download failed', url, e);
       status.failed++;
     }
@@ -64,8 +71,17 @@ async function run(base, urls, tabId, format) {
   report();
 }
 
+function cancel() {
+  if (!status?.running) return;
+  runId++;
+  Object.assign(status, { running: false, cancelled: true });
+  if (currentDownload != null) chrome.downloads.cancel(currentDownload).catch(() => {});
+  report();
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg.type === 'status') reply(status);
+  if (msg.type === 'cancel') { cancel(); reply({ ok: true }); }
   if (msg.type === 'start') {
     if (status?.running) return reply({ error: 'Đang tải, vui lòng đợi.' });
     run(msg.base, msg.urls, msg.tabId, msg.format || 'keep');

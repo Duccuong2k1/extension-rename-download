@@ -25,6 +25,7 @@ function serve(handler) {
 let proc;
 (async () => {
   const cdn = await serve((req, res) => {
+    if (req.url.startsWith('/slow')) return; // never answers: a stalled server
     if (req.url.endsWith('.bin')) { res.writeHead(200, { 'content-type': 'application/octet-stream' }); return res.end(PNG); }
     if (req.url.endsWith('.html')) { res.writeHead(200, { 'content-type': 'text/html' }); return res.end('<html>login</html>'); }
     res.writeHead(200, { 'content-type': req.url.endsWith('.png') ? 'image/png' : 'image/jpeg' });
@@ -151,6 +152,33 @@ let proc;
   assert.deepEqual(oct, ['oct-001.png']);
   assert.ok(isPng(fs.readFileSync(path.join(dl, 'oct', oct[0]))), 'oct-001.png is not a real PNG');
   console.log('F octet-stream sniff: ok');
+
+  // G: sync button appends images added after the first scan, keeping the user's ticks.
+  await pop.click('#tab-page');
+  await site1.evaluate(() => { const i = new Image(200, 200); i.src = '/new.jpg'; document.body.append(i); });
+  await pop.click('#sync');
+  await pop.waitForFunction(() => document.querySelectorAll('#grid .tile').length === 4);
+  assert.equal(await pop.textContent('#count'), 'Thêm 1 ảnh mới. Đã chọn 3 / 4');
+  assert.equal(await pop.isChecked('#grid .tile:nth-child(2) input'), false); // unticked in D, still unticked
+  await pop.click('#sync');
+  await pop.waitForFunction(() => /^Không có ảnh mới/.test(document.querySelector('#count').textContent));
+  console.log('G sync: ok');
+
+  // H: a stalled download can be cancelled, and the next run works.
+  await pop.click('#tab-paste');
+  await pop.fill('#links', `${CDN}/slow.jpg ${CDN}/slow2.jpg`);
+  await pop.click('#start');
+  await pop.waitForSelector('#cancel:not([hidden])');
+  assert.equal(await pop.isDisabled('#start'), true);
+  await pop.click('#cancel');
+  await pop.waitForFunction(() => !document.querySelector('#start').disabled && /^Đã hủy/.test(document.querySelector('#status').textContent));
+  assert.equal(await pop.isHidden('#cancel'), true);
+  await pop.fill('#links', `${CDN}/after.jpg`);
+  await pop.fill('#base', 'sau');
+  await pop.click('#start');
+  assert.deepEqual(await waitFiles('sau', 1), ['sau-001.jpg']);
+  await pop.waitForFunction(() => /^Đã tải 1 \/ 1/.test(document.querySelector('#status').textContent)); // stale run didn't overwrite
+  console.log('H cancel: ok');
 
   console.log('E2E PASS');
   proc.kill(); cdn.close(); site.close();

@@ -14,11 +14,15 @@ function say(text, bad = false) {
 function show(s) {
   if (!s) return;
   const fail = s.failed ? `, ${s.failed} lỗi` : '';
-  say(s.running ? `Đang tải ${s.done} / ${s.total}${fail}` : `Đã tải ${s.done - s.failed} / ${s.total} ảnh${fail}`, s.failed > 0);
+  const text = s.running ? `Đang tải ${s.done} / ${s.total}${fail}`
+    : s.cancelled ? `Đã hủy: tải được ${s.done - s.failed} / ${s.total} ảnh${fail}`
+    : `Đã tải ${s.done - s.failed} / ${s.total} ảnh${fail}`;
+  say(text, s.failed > 0 || !!s.cancelled);
   $('progress').hidden = false;
   $('bar').max = s.total;
   $('bar').value = s.done;
   $('start').disabled = s.running;
+  $('cancel').hidden = !s.running;
 }
 
 const baseName = () => sanitize($('base').value || $('base').placeholder);
@@ -41,37 +45,48 @@ function refreshSelection() {
   $('toggle-all').textContent = n === boxes.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả';
 }
 
-function renderGrid() {
-  $('grid').replaceChildren(...items.map(({ thumb }, i) => {
-    const tile = document.createElement('label');
-    tile.className = 'tile';
-    const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: true });
-    box.setAttribute('aria-label', `Ảnh ${i + 1}`);
-    const img = Object.assign(document.createElement('img'), { src: thumb, loading: 'lazy', alt: '' });
-    const num = Object.assign(document.createElement('span'), { className: 'num' });
-    const dim = Object.assign(document.createElement('span'), { className: 'dim' });
-    img.onload = () => (dim.textContent = `${img.naturalWidth}×${img.naturalHeight}`);
-    tile.append(img, box, num, dim);
-    return tile;
-  }));
-  $('toggle-all').hidden = !items.length;
-  if (items.length) refreshSelection();
-  else $('count').textContent = 'Không thấy ảnh nào. Cuộn trang để tải thêm ảnh, hoặc dùng tab Dán link.';
+function makeTile({ thumb }, i) {
+  const tile = document.createElement('label');
+  tile.className = 'tile';
+  const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: true });
+  box.setAttribute('aria-label', `Ảnh ${i + 1}`);
+  const img = Object.assign(document.createElement('img'), { src: thumb, loading: 'lazy', alt: '' });
+  const num = Object.assign(document.createElement('span'), { className: 'num' });
+  const dim = Object.assign(document.createElement('span'), { className: 'dim' });
+  img.onload = () => (dim.textContent = `${img.naturalWidth}×${img.naturalHeight}`);
+  tile.append(img, box, num, dim);
+  return tile;
 }
 
-async function scan() {
-  const id = Number(new URLSearchParams(location.search).get('tab')); // test hook: E2E opens popup.html as a tab
-  [tab] = id ? [await chrome.tabs.get(id)] : await chrome.tabs.query({ active: true, currentWindow: true });
-  if ((await chrome.runtime.sendMessage({ type: 'status' }))?.running) {
-    $('count').textContent = 'Đang tải ảnh. Mở lại popup sau khi tải xong để chọn ảnh mới.';
+// Appends only unseen images, so ticks survive and images the page dropped from its DOM stay.
+function addItems(fresh) {
+  const seen = new Set(items.map((it) => it.url));
+  const added = fresh.filter((it) => !seen.has(it.url) && seen.add(it.url));
+  $('grid').append(...added.map((it, k) => makeTile(it, items.length + k)));
+  items.push(...added);
+  $('toggle-all').hidden = !items.length;
+  $('sync').hidden = false;
+  if (items.length) refreshSelection();
+  else $('count').textContent = 'Không thấy ảnh nào. Cuộn trang để tải thêm ảnh, rồi bấm Cập nhật ảnh, hoặc dùng tab Dán link.';
+  return added.length;
+}
+
+async function scan(sync = false) {
+  if (!sync) {
+    const id = Number(new URLSearchParams(location.search).get('tab')); // test hook: E2E opens popup.html as a tab
+    [tab] = id ? [await chrome.tabs.get(id)] : await chrome.tabs.query({ active: true, currentWindow: true });
+  }
+  if (!sync && (await chrome.runtime.sendMessage({ type: 'status' }))?.running) {
+    $('count').textContent = 'Đang tải ảnh. Bấm Cập nhật ảnh sau khi tải xong để chọn ảnh mới.';
+    $('sync').hidden = false;
     return;
   }
   const flow = isFlow(tab?.url);
   if (flow) $('count').textContent = 'Đang cuộn dự án Flow để tìm toàn bộ ảnh…';
   try {
     const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: flow ? collectImages : collectPageImages });
-    items = (result || []).map((src) => ({ thumb: src, url: flow ? originalUrl(src) : src }));
-    renderGrid();
+    const added = addItems((result || []).map((src) => ({ thumb: src, url: flow ? originalUrl(src) : src })));
+    if (sync && items.length) $('count').textContent = `${added ? `Thêm ${added} ảnh mới` : 'Không có ảnh mới'}. ${$('count').textContent}`;
   } catch {
     $('count').textContent = 'Trang này không cho đọc ảnh. Dùng tab Dán link.';
   }
@@ -93,6 +108,12 @@ $('toggle-all').addEventListener('click', () => {
   for (const b of boxes) b.checked = !all;
   refreshSelection();
 });
+$('sync').addEventListener('click', async () => {
+  $('sync').disabled = true;
+  await scan(true);
+  $('sync').disabled = false;
+});
+$('cancel').addEventListener('click', () => chrome.runtime.sendMessage({ type: 'cancel' }));
 $('links').addEventListener('input', () => ($('link-count').textContent = `${parseLinks($('links').value).length} link hợp lệ`));
 $('base').addEventListener('input', preview);
 chrome.runtime.onMessage.addListener((msg) => msg.type === 'progress' && show(msg));
