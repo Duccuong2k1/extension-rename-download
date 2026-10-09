@@ -1,18 +1,17 @@
 import { fileName, extFromMime } from './naming.js';
 
-const pending = new Map(); // url -> { folder, base, index, total }
 let status = null; // { done, failed, total, running }
 
-// Registering this listener makes every download wait for suggest(), so always call it.
-chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
-  const job = pending.get(item.url);
-  if (!job) return suggest();
-  pending.delete(item.url);
-  suggest({
-    filename: `${job.base}/${fileName(job.base, job.index, job.total, extFromMime(item.mime))}`,
-    conflictAction: 'uniquify',
-  });
-});
+// Runs inside the Flow tab: the image URLs need the user's Google login cookies,
+// which chrome.downloads requests from the extension don't carry.
+async function fetchAsBlobUrl(url) {
+  const res = await fetch(url, { credentials: 'include' });
+  const blob = await res.blob();
+  if (!res.ok || !blob.type.startsWith('image/')) throw new Error(`HTTP ${res.status} ${blob.type}`);
+  const blobUrl = URL.createObjectURL(blob);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 5 * 60_000);
+  return { blobUrl, mime: blob.type };
+}
 
 function waitDone(id) {
   return new Promise((resolve) => {
@@ -36,16 +35,18 @@ function waitDone(id) {
 
 const report = () => chrome.runtime.sendMessage({ type: 'progress', ...status }).catch(() => {});
 
-async function run(base, urls) {
+async function run(base, urls, tabId) {
   status = { done: 0, failed: 0, total: urls.length, running: true };
   report();
   for (const [i, url] of urls.entries()) {
-    pending.set(url, { base, index: i + 1, total: urls.length });
     try {
-      const id = await chrome.downloads.download({ url });
+      const [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, func: fetchAsBlobUrl, args: [url] });
+      if (!result) throw new Error('fetch failed in page');
+      const name = fileName(base, i + 1, urls.length, extFromMime(result.mime));
+      const id = await chrome.downloads.download({ url: result.blobUrl, filename: `${base}/${name}`, conflictAction: 'uniquify' });
       if (!(await waitDone(id))) status.failed++;
-    } catch {
-      pending.delete(url);
+    } catch (e) {
+      console.warn('download failed', url, e);
       status.failed++;
     }
     status.done++;
@@ -59,7 +60,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg.type === 'status') reply(status);
   if (msg.type === 'start') {
     if (status?.running) return reply({ error: 'Đang tải, vui lòng đợi.' });
-    run(msg.base, msg.urls);
+    run(msg.base, msg.urls, msg.tabId);
     reply({ ok: true });
   }
 });

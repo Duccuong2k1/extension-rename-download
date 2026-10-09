@@ -27,7 +27,7 @@ $('start').addEventListener('click', async () => {
       $('start').disabled = false;
       return say('Không tìm thấy ảnh nào.');
     }
-    const res = await chrome.runtime.sendMessage({ type: 'start', base: sanitize($('base').value), urls });
+    const res = await chrome.runtime.sendMessage({ type: 'start', base: sanitize($('base').value), urls, tabId: tab.id });
     if (res?.error) say(res.error);
   } catch (e) {
     $('start').disabled = false;

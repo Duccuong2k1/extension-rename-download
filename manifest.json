@@ -3,7 +3,8 @@
   "name": "Flow Bulk Rename & Download",
   "version": "1.0.0",
   "description": "Tải toàn bộ ảnh trong dự án Google Flow, đổi tên theo thứ tự đang hiển thị.",
-  "permissions": ["downloads", "activeTab", "scripting"],
+  "permissions": ["downloads", "scripting"],
+  "host_permissions": ["https://flow.google.com/*", "https://labs.google/*"],
   "background": { "service_worker": "background.js", "type": "module" },
   "action": { "default_popup": "popup.html", "default_title": "Flow Bulk Rename & Download" }
 }
