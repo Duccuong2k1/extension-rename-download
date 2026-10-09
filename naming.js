@@ -23,3 +23,8 @@ export function extFromMime(mime) {
   const sub = (mime || '').split('/')[1]?.split(';')[0].trim();
   return { jpeg: 'jpg', 'svg+xml': 'svg' }[sub] || sub || 'jpg';
 }
+
+// Pasted links may be separated by any mix of spaces and newlines.
+export function parseLinks(text) {
+  return [...new Set(String(text ?? '').split(/\s+/).filter((s) => /^(https?:\/\/\S+|data:image\/)/i.test(s)))];
+}
