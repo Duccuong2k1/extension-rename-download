@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "Flow Bulk Rename & Download",
-  "version": "1.0.0",
-  "description": "Tải toàn bộ ảnh trong dự án Google Flow, đổi tên theo thứ tự đang hiển thị.",
-  "permissions": ["downloads", "scripting"],
-  "host_permissions": ["https://flow.google.com/*", "https://labs.google/*"],
+  "name": "Image Bulk Rename & Download",
+  "version": "2.0.0",
+  "description": "Chọn ảnh trên trang hoặc dán link, đổi định dạng, tải về và đổi tên theo thứ tự.",
+  "permissions": ["downloads", "scripting", "activeTab", "offscreen"],
+  "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js", "type": "module" },
-  "action": { "default_popup": "popup.html", "default_title": "Flow Bulk Rename & Download" }
+  "action": { "default_popup": "popup.html", "default_title": "Image Bulk Rename & Download" }
 }

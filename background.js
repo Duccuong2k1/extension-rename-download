@@ -1,16 +1,25 @@
 import { fileName, extFromMime } from './naming.js';
+import { fetchImage } from './fetch-image.js';
 
 let status = null; // { done, failed, total, running }
 
-// Runs inside the Flow tab: the image URLs need the user's Google login cookies,
-// which chrome.downloads requests from the extension don't carry.
-async function fetchAsBlobUrl(url) {
-  const res = await fetch(url, { credentials: 'include' });
-  const blob = await res.blob();
-  if (!res.ok || !blob.type.startsWith('image/')) throw new Error(`HTTP ${res.status} ${blob.type}`);
-  const blobUrl = URL.createObjectURL(blob);
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 5 * 60_000);
-  return { blobUrl, mime: blob.type };
+async function ensureOffscreen() {
+  if (await chrome.offscreen.hasDocument()) return;
+  await chrome.offscreen.createDocument({ url: 'offscreen.html', reasons: ['BLOBS'], justification: 'Fetch and convert images for download' });
+}
+
+// In the tab first (site cookies, e.g. Flow login); else from the extension origin (no CORS limits).
+async function getImage(url, format, tabId) {
+  if (tabId != null) {
+    try {
+      const [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, func: fetchImage, args: [url, format] });
+      if (result) return result;
+    } catch {} // unscriptable tab: fall through
+  }
+  await ensureOffscreen();
+  const r = await chrome.runtime.sendMessage({ type: 'offscreen-fetch', url, format });
+  if (!r || r.error) throw new Error(r?.error || 'offscreen fetch failed');
+  return r;
 }
 
 function waitDone(id) {
@@ -35,13 +44,12 @@ function waitDone(id) {
 
 const report = () => chrome.runtime.sendMessage({ type: 'progress', ...status }).catch(() => {});
 
-async function run(base, urls, tabId) {
+async function run(base, urls, tabId, format) {
   status = { done: 0, failed: 0, total: urls.length, running: true };
   report();
   for (const [i, url] of urls.entries()) {
     try {
-      const [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, func: fetchAsBlobUrl, args: [url] });
-      if (!result) throw new Error('fetch failed in page');
+      const result = await getImage(url, format, tabId);
       const name = fileName(base, i + 1, urls.length, extFromMime(result.mime));
       const id = await chrome.downloads.download({ url: result.blobUrl, filename: `${base}/${name}`, conflictAction: 'uniquify' });
       if (!(await waitDone(id))) status.failed++;
@@ -60,7 +68,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg.type === 'status') reply(status);
   if (msg.type === 'start') {
     if (status?.running) return reply({ error: 'Đang tải, vui lòng đợi.' });
-    run(msg.base, msg.urls, msg.tabId);
+    run(msg.base, msg.urls, msg.tabId, msg.format || 'keep');
     reply({ ok: true });
   }
 });
