@@ -25,6 +25,8 @@ function serve(handler) {
 let proc;
 (async () => {
   const cdn = await serve((req, res) => {
+    if (req.url.endsWith('.bin')) { res.writeHead(200, { 'content-type': 'application/octet-stream' }); return res.end(PNG); }
+    if (req.url.endsWith('.html')) { res.writeHead(200, { 'content-type': 'text/html' }); return res.end('<html>login</html>'); }
     res.writeHead(200, { 'content-type': req.url.endsWith('.png') ? 'image/png' : 'image/jpeg' });
     res.end(req.url.endsWith('.png') ? PNG : JPG);
   });
@@ -88,6 +90,13 @@ let proc;
     await chrome.runtime.sendMessage({ type: 'start', base: 'flow', urls: result.map(originalUrl), tabId, format: 'keep' });
   }, { tabId: flowTab });
   assert.deepEqual(await waitFiles('flow', FLOW_N), ['flow-001.jpg', 'flow-002.png', 'flow-003.jpg', 'flow-004.png', 'flow-005.jpg']);
+  const both = await ext.evaluate(async ({ tabId }) => {
+    const { collectImages } = await import('./content.js');
+    const run = () => chrome.scripting.executeScript({ target: { tabId }, func: collectImages });
+    return (await Promise.all([run(), run()])).map(([r]) => r.result);
+  }, { tabId: flowTab });
+  assert.equal(both[0].length, FLOW_N);
+  assert.deepEqual(both[0], both[1]);
   console.log('A flow: ok');
 
   // B: same-origin + cross-origin (no CORS) images, converted to PNG.
@@ -131,6 +140,17 @@ let proc;
   await pop.click('#start');
   assert.deepEqual(await waitFiles('dan', 2), ['dan-001.png', 'dan-002.jpg']);
   console.log('E paste links: ok');
+
+  // F: octet-stream image is sniffed and saved as PNG; an HTML login page is rejected.
+  await ext.evaluate(async ({ tabId, urls }) => {
+    await chrome.runtime.sendMessage({ type: 'start', base: 'oct', urls, tabId, format: 'keep' });
+  }, { tabId: siteTab, urls: [CDN + '/a.bin', CDN + '/b.html'] });
+  await waitFiles('oct', 1);
+  for (let t = 0; t < 60 && (await ext.evaluate(() => chrome.runtime.sendMessage({ type: 'status' })))?.running; t++) await new Promise((r) => setTimeout(r, 500));
+  const oct = files('oct').filter((f) => !f.endsWith('.crdownload'));
+  assert.deepEqual(oct, ['oct-001.png']);
+  assert.ok(isPng(fs.readFileSync(path.join(dl, 'oct', oct[0]))), 'oct-001.png is not a real PNG');
+  console.log('F octet-stream sniff: ok');
 
   console.log('E2E PASS');
   proc.kill(); cdn.close(); site.close();

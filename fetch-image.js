@@ -2,6 +2,14 @@
 export async function fetchImage(url, format) {
   const res = await fetch(url, { credentials: 'include' });
   let blob = await res.blob();
+  if (res.ok && !blob.type.startsWith('image/')) {
+    // CDNs/S3 often serve real images as octet-stream: trust magic bytes, not the header.
+    const b = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
+    const at = (sig, off = 0) => sig.every((v, i) => b[off + i] === v);
+    const type = at([0x89, 0x50, 0x4e, 0x47]) ? 'image/png' : at([0xff, 0xd8, 0xff]) ? 'image/jpeg'
+      : at([0x47, 0x49, 0x46, 0x38]) ? 'image/gif' : at([0x52, 0x49, 0x46, 0x46]) && at([0x57, 0x45, 0x42, 0x50], 8) ? 'image/webp' : '';
+    if (type) blob = new Blob([blob], { type });
+  }
   if (!res.ok || !blob.type.startsWith('image/')) throw new Error(`HTTP ${res.status} ${blob.type || 'unknown'}`);
   const target = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' }[format];
   if (target && target !== blob.type) {
