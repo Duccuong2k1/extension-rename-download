@@ -89,3 +89,10 @@ all your data on all websites" on reload — expected.
 
 Auto-scroll on non-Flow pages, size/type filters, video, on-page selection overlay,
 separate picker tab, quality slider.
+
+## Deviations
+
+- `largestSrcset` and `mimeForFormat` do not go into `naming.js`: they are used only inside functions injected with `executeScript`, which must be self-contained. So they live inline in `collectPageImages` and `fetchImage`, and the E2E covers them.
+- Collectors return plain URL strings. The popup reads each thumbnail's natural size when it loads, so there is no `{w, h}` plumbing.
+- Conversion decodes with `new Image()` + `decode()` instead of `createImageBitmap`, because `createImageBitmap` cannot decode SVG.
+- Size filter skips an image only when both its natural and rendered size are under 50×50 (`Math.max(natural, rendered)`), so small-file images displayed large still appear.
