@@ -1,7 +1,11 @@
 // Injected via chrome.scripting.executeScript({func}) — must stay self-contained.
 // Flow's grid is a cdk virtual scroller, so tiles leave the DOM as you scroll:
 // collect while scrolling, then order by on-screen position (row, then column).
-export async function collectImages() {
+export function collectImages() {
+  // One scan per tab: a second call (popup reopened) shares the running one.
+  return (window.__flowCollect ||= scrollCollect().finally(() => { window.__flowCollect = null; }));
+
+  async function scrollCollect() {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const sc = document.querySelector('.cdk-virtual-scrollable');
   if (!sc) return [];
@@ -33,6 +37,7 @@ export async function collectImages() {
   sc.scrollTop = 0;
 
   return [...seen.values()].sort((a, b) => a.y - b.y || a.x - b.x).map((t) => t.src);
+  }
 }
 
 // Injected via executeScript — must stay self-contained. Returns absolute URLs in page order.

@@ -62,6 +62,10 @@ function renderGrid() {
 async function scan() {
   const id = Number(new URLSearchParams(location.search).get('tab')); // test hook: E2E opens popup.html as a tab
   [tab] = id ? [await chrome.tabs.get(id)] : await chrome.tabs.query({ active: true, currentWindow: true });
+  if ((await chrome.runtime.sendMessage({ type: 'status' }))?.running) {
+    $('count').textContent = 'Đang tải ảnh. Mở lại popup sau khi tải xong để chọn ảnh mới.';
+    return;
+  }
   const flow = isFlow(tab?.url);
   if (flow) $('count').textContent = 'Đang cuộn dự án Flow để tìm toàn bộ ảnh…';
   try {
