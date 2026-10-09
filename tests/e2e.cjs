@@ -108,6 +108,30 @@ let proc;
   assert.deepEqual(scanned, [SITE + '/big.jpg', SITE + '/bg.jpg', CDN + '/cross.png']);
   console.log('C page scan: ok');
 
+  // D: popup UI on the generic page: grid, uncheck one, JPG, download.
+  const pop = await ctx.newPage();
+  await pop.goto(`chrome-extension://${extId}/popup.html?tab=${siteTab}`);
+  await pop.waitForFunction(() => document.querySelectorAll('#grid .tile').length === 3);
+  assert.equal(await pop.textContent('#count'), 'Đã chọn 3 / 3');
+  await pop.click('#grid .tile:nth-child(2)'); // drop the CSS background
+  assert.equal(await pop.textContent('#count'), 'Đã chọn 2 / 3');
+  await pop.fill('#base', 'ui');
+  await pop.selectOption('#format', 'jpg');
+  await pop.click('#start');
+  assert.deepEqual(await waitFiles('ui', 2), ['ui-001.jpg', 'ui-002.jpg']);
+  await pop.waitForFunction(() => /^Đã tải 2 \/ 2/.test(document.querySelector('#status').textContent));
+  console.log('D popup grid: ok');
+
+  // E: paste tab with junk and duplicates, keep format.
+  await pop.click('#tab-paste');
+  await pop.fill('#links', `${CDN}/p1.png   rác\n${CDN}/p2.jpg\n${CDN}/p1.png`);
+  assert.equal(await pop.textContent('#link-count'), '2 link hợp lệ');
+  await pop.fill('#base', 'dan');
+  await pop.selectOption('#format', 'keep');
+  await pop.click('#start');
+  assert.deepEqual(await waitFiles('dan', 2), ['dan-001.png', 'dan-002.jpg']);
+  console.log('E paste links: ok');
+
   console.log('E2E PASS');
   proc.kill(); cdn.close(); site.close();
   process.exit(0);

@@ -4,58 +4,83 @@
   <meta charset="utf-8">
   <style>
     :root {
-      --bg: #17181c;
-      --surface: #22242a;
-      --line: #34363d;
-      --text: #ecebf0;
-      --muted: #9a9ba6;
-      --accent: #a8b4ff;
-      --on-accent: #15172a;
-      --bad: #ff9a8f;
+      --bg: #17181c; --surface: #22242a; --line: #34363d; --text: #ecebf0;
+      --muted: #9a9ba6; --accent: #a8b4ff; --on-accent: #15172a; --bad: #ff9a8f;
       color-scheme: dark;
     }
     * { box-sizing: border-box; }
     body {
-      width: 320px; margin: 0; padding: 18px 18px 16px;
+      width: 400px; margin: 0; padding: 16px 16px 14px;
       background: var(--bg); color: var(--text);
       font: 14px/1.45 "Google Sans Text", "Google Sans", "Segoe UI Variable Text", system-ui, sans-serif;
     }
-    h1 { margin: 0 0 14px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
-    label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px; }
-    input {
-      width: 100%; padding: 10px 12px; border-radius: 10px;
+    h1 { margin: 0 0 12px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+    label.field { display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px; }
+    input[type=text], select, textarea {
+      width: 100%; padding: 9px 11px; border-radius: 10px;
       border: 1px solid var(--line); background: var(--surface); color: var(--text);
-      font: inherit; outline: none; transition: border-color .15s;
+      font: inherit; outline: none;
     }
-    input::placeholder { color: #6c6d77; }
-    input:focus-visible { border-color: var(--accent); }
+    input[type=text]:focus-visible, select:focus-visible, textarea:focus-visible { border-color: var(--accent); }
+    input::placeholder, textarea::placeholder { color: #6c6d77; }
 
-    /* The memorable bit: the actual file names you will get. */
+    [role=tablist] { display: flex; gap: 4px; padding: 3px; margin-bottom: 10px; border-radius: 999px; background: var(--surface); }
+    [role=tab] {
+      flex: 1; padding: 7px; border: 0; border-radius: 999px; background: none;
+      color: var(--muted); font: inherit; font-size: 13px; cursor: pointer;
+    }
+    [role=tab][aria-selected=true] { background: var(--line); color: var(--text); }
+    [role=tab]:focus-visible { outline: 2px solid var(--accent); }
+
+    .bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13px; color: var(--muted); }
+    .link { border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; padding: 0; }
+    .link:focus-visible { outline: 2px solid var(--accent); }
+    .grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+      max-height: 264px; overflow-y: auto; margin-bottom: 12px;
+    }
+    .grid:empty { display: none; }
+    .tile {
+      position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden;
+      background: var(--surface); cursor: pointer; outline: 2px solid transparent; outline-offset: -2px;
+    }
+    .tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .tile input { position: absolute; top: 6px; left: 6px; margin: 0; accent-color: var(--accent); width: 16px; height: 16px; }
+    .tile:has(input:checked) { outline-color: var(--accent); }
+    .tile:not(:has(input:checked)) img { opacity: .35; }
+    .tile:has(input:focus-visible) { outline-color: var(--text); }
+    .tile .num, .tile .dim {
+      position: absolute; padding: 1px 6px; border-radius: 6px;
+      background: rgb(23 24 28 / .8); font-size: 11px; font-variant-numeric: tabular-nums;
+    }
+    .tile .num { top: 5px; right: 5px; color: var(--accent); font-weight: 600; }
+    .tile .num:empty { display: none; }
+    .tile .dim { bottom: 5px; left: 5px; color: var(--muted); }
+    .tile .dim:empty { display: none; }
+    textarea { height: 140px; resize: vertical; font-size: 12px; line-height: 1.5; }
+    .hint { margin: 6px 0 12px; color: var(--muted); font-size: 12px; }
+
+    .row { display: grid; grid-template-columns: 1fr 120px; gap: 8px; }
     .preview {
-      margin: 12px 0 4px; padding: 10px 12px; border-radius: 10px;
+      margin: 10px 0 12px; padding: 9px 11px; border-radius: 10px;
       background: var(--surface); font-variant-numeric: tabular-nums;
       overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
     }
     .preview b { color: var(--accent); font-weight: 600; }
     .preview span { color: var(--muted); }
-    .hint { margin: 0 0 14px; color: var(--muted); font-size: 12px; }
 
-    button {
+    #start {
       width: 100%; padding: 11px; border: 0; border-radius: 999px;
       background: var(--accent); color: var(--on-accent);
-      font: inherit; font-weight: 600; cursor: pointer;
-      transition: filter .15s, opacity .15s;
+      font: inherit; font-weight: 600; cursor: pointer; transition: filter .15s, opacity .15s;
     }
-    button:hover:not(:disabled) { filter: brightness(1.08); }
-    button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
-    button:disabled { opacity: .45; cursor: default; }
+    #start:hover:not(:disabled) { filter: brightness(1.08); }
+    #start:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+    #start:disabled { opacity: .45; cursor: default; }
 
-    .progress { margin-top: 14px; }
+    .progress { margin-top: 12px; }
     .progress[hidden] { display: none; }
-    progress {
-      appearance: none; width: 100%; height: 6px; border: 0; border-radius: 999px;
-      background: var(--surface); overflow: hidden; display: block;
-    }
+    progress { appearance: none; width: 100%; height: 6px; border: 0; border-radius: 999px; background: var(--surface); overflow: hidden; display: block; }
     progress::-webkit-progress-bar { background: var(--surface); }
     progress::-webkit-progress-value { background: var(--accent); border-radius: 999px; transition: width .2s; }
     #status { margin: 8px 0 0; font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -64,15 +89,41 @@
   </style>
 </head>
 <body>
-  <h1>Đổi tên và tải ảnh Flow</h1>
-  <label for="base">Tên file</label>
-  <input id="base" placeholder="sanpham" autocomplete="off" autofocus>
-  <div class="preview" id="preview" aria-live="polite"></div>
-  <p class="hint">Ảnh được đánh số theo thứ tự đang hiển thị. Chọn sắp xếp trong Flow trước khi tải.</p>
-  <button id="start">Tải và đổi tên</button>
-  <div class="progress" id="progress" hidden>
-    <progress id="bar" value="0" max="1"></progress>
+  <h1>Tải ảnh và đổi tên</h1>
+  <div role="tablist">
+    <button role="tab" id="tab-page" aria-selected="true" aria-controls="panel-page">Ảnh trên trang</button>
+    <button role="tab" id="tab-paste" aria-selected="false" aria-controls="panel-paste">Dán link</button>
   </div>
+
+  <section id="panel-page" role="tabpanel" aria-labelledby="tab-page">
+    <div class="bar"><span id="count" aria-live="polite">Đang tìm ảnh trên trang…</span><button class="link" id="toggle-all" hidden>Bỏ chọn tất cả</button></div>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <section id="panel-paste" role="tabpanel" aria-labelledby="tab-paste" hidden>
+    <label class="field" for="links">Link ảnh</label>
+    <textarea id="links" placeholder="Dán link ảnh, cách nhau bằng dấu cách hoặc xuống dòng"></textarea>
+    <p class="hint" id="link-count" aria-live="polite">0 link hợp lệ</p>
+  </section>
+
+  <div class="row">
+    <div>
+      <label class="field" for="base">Tên file</label>
+      <input type="text" id="base" placeholder="anh" autocomplete="off">
+    </div>
+    <div>
+      <label class="field" for="format">Định dạng</label>
+      <select id="format">
+        <option value="keep">Giữ nguyên</option>
+        <option value="png">PNG</option>
+        <option value="jpg">JPG</option>
+        <option value="webp">WebP</option>
+      </select>
+    </div>
+  </div>
+  <div class="preview" id="preview" aria-live="polite"></div>
+  <button id="start">Tải và đổi tên</button>
+  <div class="progress" id="progress" hidden><progress id="bar" value="0" max="1"></progress></div>
   <p id="status" role="status"></p>
   <script type="module" src="popup.js"></script>
 </body>
