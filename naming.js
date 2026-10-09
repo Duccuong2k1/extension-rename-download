@@ -12,6 +12,13 @@ export function fileName(base, index, total, ext) {
   return `${base}-${String(index).padStart(width, '0')}.${ext}`;
 }
 
+// Swap the size suffix (=s1600-rw) in the path for =d (original file); keep ?authuser=N.
+export function originalUrl(src) {
+  const u = new URL(src);
+  u.pathname = u.pathname.replace(/=[^=/]*$/, '') + '=d';
+  return u.href;
+}
+
 export function extFromMime(mime) {
   const sub = (mime || '').split('/')[1]?.split(';')[0].trim();
   return { jpeg: 'jpg', 'svg+xml': 'svg' }[sub] || sub || 'jpg';

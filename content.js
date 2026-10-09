@@ -11,10 +11,10 @@ export async function collectImages() {
     document.querySelectorAll('img.image').forEach((img) => {
       if (img.closest('.container')?.querySelector('video')) return; // video tile
       if (!img.src.startsWith('http')) return;
-      const key = img.src.replace(/=[^=/]*$/, ''); // strip size suffix like =s1600-rw
+      const key = new URL(img.src).pathname.replace(/=[^=/]*$/, ''); // same image at any size
       if (seen.has(key)) return;
       const r = img.getBoundingClientRect();
-      seen.set(key, { y: Math.round(r.top - top0 + sc.scrollTop), x: Math.round(r.left) });
+      seen.set(key, { src: img.src, y: Math.round(r.top - top0 + sc.scrollTop), x: Math.round(r.left) });
     });
   };
 
@@ -32,7 +32,5 @@ export async function collectImages() {
   grab();
   sc.scrollTop = 0;
 
-  return [...seen]
-    .sort(([, a], [, b]) => a.y - b.y || a.x - b.x)
-    .map(([key]) => key + '=d'); // =d serves the original file
+  return [...seen.values()].sort((a, b) => a.y - b.y || a.x - b.x).map((t) => t.src);
 }

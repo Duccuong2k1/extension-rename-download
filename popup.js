@@ -1,4 +1,4 @@
-import { sanitize } from './naming.js';
+import { sanitize, originalUrl } from './naming.js';
 import { collectImages } from './content.js';
 
 const $ = (id) => document.getElementById(id);
@@ -27,7 +27,7 @@ $('start').addEventListener('click', async () => {
       $('start').disabled = false;
       return say('Không tìm thấy ảnh nào.');
     }
-    const res = await chrome.runtime.sendMessage({ type: 'start', base: sanitize($('base').value), urls, tabId: tab.id });
+    const res = await chrome.runtime.sendMessage({ type: 'start', base: sanitize($('base').value), urls: urls.map(originalUrl), tabId: tab.id });
     if (res?.error) say(res.error);
   } catch (e) {
     $('start').disabled = false;
