@@ -100,8 +100,13 @@ $('start').addEventListener('click', async () => {
   const urls = pasting ? parseLinks($('links').value) : items.filter((_, i) => boxes[i].checked).map((it) => it.url);
   if (!urls.length) return say(pasting ? 'Dán ít nhất một link ảnh.' : 'Chọn ít nhất một ảnh.', true);
   $('start').disabled = true;
-  const res = await chrome.runtime.sendMessage({ type: 'start', base: baseName(), urls, tabId: tab?.id, format: $('format').value });
-  if (res?.error) { say(res.error, true); $('start').disabled = false; }
+  try {
+    const res = await chrome.runtime.sendMessage({ type: 'start', base: baseName(), urls, tabId: tab?.id, format: $('format').value });
+    if (res?.error) { say(res.error, true); $('start').disabled = false; }
+  } catch (e) {
+    say('Không tải được: ' + e.message, true);
+    $('start').disabled = false;
+  }
 });
 
 preview();
