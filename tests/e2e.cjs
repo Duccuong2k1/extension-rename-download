@@ -22,6 +22,7 @@ function serve(handler) {
   return new Promise((ok) => { const s = http.createServer(handler).listen(0, '127.0.0.1', () => ok(s)); });
 }
 
+let proc;
 (async () => {
   const cdn = await serve((req, res) => {
     res.writeHead(200, { 'content-type': req.url.endsWith('.png') ? 'image/png' : 'image/jpeg' });
@@ -47,7 +48,7 @@ function serve(handler) {
   const prof = fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-prof-'));
   fs.mkdirSync(path.join(prof, 'Default'));
   fs.writeFileSync(path.join(prof, 'Default', 'Preferences'), JSON.stringify({ download: { default_directory: dl, prompt_for_download: false } }));
-  const proc = require('child_process').spawn(CHROME, [`--user-data-dir=${prof}`, '--remote-debugging-port=9333', '--no-first-run',
+  proc = require('child_process').spawn(CHROME, [`--user-data-dir=${prof}`, '--remote-debugging-port=9333', '--no-first-run',
     `--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`, 'about:blank']);
   let browser;
   for (let t = 0; t < 40 && !browser; t++) { await new Promise((r) => setTimeout(r, 500)); browser = await chromium.connectOverCDP('http://127.0.0.1:9333').catch(() => null); }
@@ -99,7 +100,15 @@ function serve(handler) {
   for (const f of conv) assert.ok(isPng(fs.readFileSync(path.join(dl, 'conv', f))), f + ' is not a real PNG');
   console.log('B convert + cross-origin: ok');
 
+  // C: page scan picks srcset's biggest, CSS background, cross-origin; skips the 16px icon.
+  const scanned = await ext.evaluate(async ({ tabId }) => {
+    const { collectPageImages } = await import('./content.js');
+    return (await chrome.scripting.executeScript({ target: { tabId }, func: collectPageImages }))[0].result;
+  }, { tabId: siteTab });
+  assert.deepEqual(scanned, [SITE + '/big.jpg', SITE + '/bg.jpg', CDN + '/cross.png']);
+  console.log('C page scan: ok');
+
   console.log('E2E PASS');
   proc.kill(); cdn.close(); site.close();
   process.exit(0);
-})().catch((e) => { console.error('E2E FAIL', e); process.exit(1); });
+})().catch((e) => { console.error('E2E FAIL', e); proc?.kill(); process.exit(1); });
