@@ -61,6 +61,8 @@
     .tile .dim:empty { display: none; }
     textarea { height: 140px; resize: vertical; font-size: 12px; line-height: 1.5; }
     .hint { margin: 6px 0 12px; color: var(--muted); font-size: 12px; }
+    #format-hint { margin: 8px 0 0; }
+    #format-hint:empty { display: none; }
 
     .row { display: grid; grid-template-columns: 1fr 120px; gap: 8px; }
     .preview {
@@ -131,6 +133,7 @@
       </select>
     </div>
   </div>
+  <p class="hint" id="format-hint" aria-live="polite"></p>
   <div class="preview" id="preview" aria-live="polite"></div>
   <div class="buttons">
     <button id="start">Tải và đổi tên</button>

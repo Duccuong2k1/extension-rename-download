@@ -123,6 +123,8 @@ let proc;
   await pop.goto(`chrome-extension://${extId}/popup.html?tab=${siteTab}`);
   await pop.waitForFunction(() => document.querySelectorAll('#grid .tile').length === 3);
   assert.equal(await pop.textContent('#count'), 'Đã chọn 3 / 3');
+  await pop.waitForFunction(() => document.querySelector('#format-hint').textContent);
+  assert.match(await pop.textContent('#format-hint'), /^Ảnh trên trang: JPG 2 · PNG 1\./);
   await pop.click('#grid .tile:nth-child(2)'); // drop the CSS background
   assert.equal(await pop.textContent('#count'), 'Đã chọn 2 / 3');
   await pop.fill('#base', 'ui');
@@ -179,6 +181,16 @@ let proc;
   assert.deepEqual(await waitFiles('sau', 1), ['sau-001.jpg']);
   await pop.waitForFunction(() => /^Đã tải 1 \/ 1/.test(document.querySelector('#status').textContent)); // stale run didn't overwrite
   console.log('H cancel: ok');
+
+  // I: Flow thumbnails need the login cookie, so the popup grid must still show them.
+  const flowPop = await ctx.newPage();
+  await flowPop.goto(`chrome-extension://${extId}/popup.html?tab=${flowTab}`);
+  await flowPop.waitForFunction((n) => document.querySelectorAll('#grid .tile').length === n, FLOW_N);
+  await flowPop.waitForFunction(() => [...document.querySelectorAll('#grid img')].every((i) => i.complete && i.src), null, { timeout: 15000 });
+  assert.deepEqual(await flowPop.$$eval('#grid img', (imgs) => imgs.map((i) => i.naturalWidth > 0)), Array(FLOW_N).fill(true));
+  await flowPop.waitForFunction(() => document.querySelector('#format-hint').textContent);
+  assert.match(await flowPop.textContent('#format-hint'), /^Ảnh trên trang: JPG 3 · PNG 2\./); // types of the =d originals, via the tab's cookies
+  console.log('I flow thumbnails: ok');
 
   console.log('E2E PASS');
   proc.kill(); cdn.close(); site.close();

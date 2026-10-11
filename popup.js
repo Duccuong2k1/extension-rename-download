@@ -1,5 +1,5 @@
 import { sanitize, originalUrl, parseLinks } from './naming.js';
-import { collectImages, collectPageImages } from './content.js';
+import { collectImages, collectPageImages, makeThumbs, headTypes } from './content.js';
 
 const $ = (id) => document.getElementById(id);
 const isFlow = (url) => /^https:\/\/(flow\.google\.com|labs\.google)\/.*project\//.test(url || '');
@@ -50,7 +50,8 @@ function makeTile({ thumb }, i) {
   tile.className = 'tile';
   const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: true });
   box.setAttribute('aria-label', `Ảnh ${i + 1}`);
-  const img = Object.assign(document.createElement('img'), { src: thumb, loading: 'lazy', alt: '' });
+  const img = Object.assign(document.createElement('img'), { loading: 'lazy', alt: '' });
+  if (thumb) img.src = thumb; // Flow tiles get theirs later from loadThumbs
   const num = Object.assign(document.createElement('span'), { className: 'num' });
   const dim = Object.assign(document.createElement('span'), { className: 'dim' });
   img.onload = () => (dim.textContent = `${img.naturalWidth}×${img.naturalHeight}`);
@@ -62,13 +63,49 @@ function makeTile({ thumb }, i) {
 function addItems(fresh) {
   const seen = new Set(items.map((it) => it.url));
   const added = fresh.filter((it) => !seen.has(it.url) && seen.add(it.url));
-  $('grid').append(...added.map((it, k) => makeTile(it, items.length + k)));
+  $('grid').append(...added.map((it, k) => (it.tile = makeTile(it, items.length + k))));
   items.push(...added);
   $('toggle-all').hidden = !items.length;
   $('sync').hidden = false;
   if (items.length) refreshSelection();
   else $('count').textContent = 'Không thấy ảnh nào. Cuộn trang để tải thêm ảnh, rồi bấm Cập nhật ảnh, hoặc dùng tab Dán link.';
-  return added.length;
+  return added;
+}
+
+// Flow images need the tab's login cookies, so the tab builds the thumbnails, a few at a time.
+async function loadThumbs(added) {
+  for (let i = 0; i < added.length; i += 12) {
+    const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: makeThumbs, args: [added.slice(i, i + 12).map((it) => it.src)] });
+    (result || []).forEach((t, k) => {
+      if (!t) return;
+      added[i + k].tile.querySelector('img').src = t.src;
+      added[i + k].tile.querySelector('.dim').textContent = `${t.w}×${t.h}`;
+    });
+  }
+}
+
+const TYPE_LABEL = { 'image/jpeg': 'JPG', 'image/png': 'PNG', 'image/webp': 'WebP', 'image/gif': 'GIF', 'image/avif': 'AVIF', 'image/svg+xml': 'SVG' };
+
+// Shows which formats the page really serves, so the user can pick one that needs no conversion.
+async function detectTypes(added, flow) {
+  const urls = added.map((it) => it.url);
+  const types = [];
+  for (let i = 0; i < urls.length; i += 24) {
+    const chunk = urls.slice(i, i + 24);
+    types.push(...(flow ? (await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: headTypes, args: [chunk] }))[0].result : await headTypes(chunk)));
+  }
+  added.forEach((it, k) => (it.type = types[k]));
+  const counts = {};
+  for (const { type } of items) {
+    const label = type && (TYPE_LABEL[type] || type.slice(6).toUpperCase());
+    if (label) counts[label] = (counts[label] || 0) + 1;
+  }
+  const parts = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  if (!parts.length) return ($('format-hint').textContent = '');
+  const top = parts[0][0];
+  const pick = ['JPG', 'PNG', 'WebP'].includes(top) ? top : 'JPG'; // only formats the select offers
+  $('format-hint').textContent = `Ảnh trên trang: ${parts.map(([k, n]) => `${k} ${n}`).join(' · ')}. `
+    + (parts.length === 1 ? `Chọn Giữ nguyên để ra ${top}, tải nhanh nhất.` : `Muốn cùng một định dạng thì chọn ${pick}; Giữ nguyên vẫn nhanh nhất.`);
 }
 
 async function scan(sync = false) {
@@ -85,8 +122,10 @@ async function scan(sync = false) {
   if (flow) $('count').textContent = 'Đang cuộn dự án Flow để tìm toàn bộ ảnh…';
   try {
     const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: flow ? collectImages : collectPageImages });
-    const added = addItems((result || []).map((src) => ({ thumb: src, url: flow ? originalUrl(src) : src })));
-    if (sync && items.length) $('count').textContent = `${added ? `Thêm ${added} ảnh mới` : 'Không có ảnh mới'}. ${$('count').textContent}`;
+    const added = addItems((result || []).map((src) => ({ thumb: flow ? null : src, src, url: flow ? originalUrl(src) : src })));
+    if (sync && items.length) $('count').textContent = `${added.length ? `Thêm ${added.length} ảnh mới` : 'Không có ảnh mới'}. ${$('count').textContent}`;
+    if (flow) loadThumbs(added).catch(() => {});
+    if (added.length) detectTypes(added, flow).catch(() => {});
   } catch {
     $('count').textContent = 'Trang này không cho đọc ảnh. Dùng tab Dán link.';
   }

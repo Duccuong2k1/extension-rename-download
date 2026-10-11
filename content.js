@@ -40,6 +40,45 @@ export function collectImages() {
   }
 }
 
+// Injected into the Flow tab: its images need the login cookies, which the popup's <img> requests lack.
+// Returns a small JPEG data URL plus the source size per URL (null when it fails).
+export function makeThumbs(urls, size = 240) {
+  return Promise.all(urls.map(async (url) => {
+    try {
+      const res = await fetch(url, { credentials: 'include' });
+      if (!res.ok) return null;
+      const img = new Image();
+      img.src = URL.createObjectURL(await res.blob()); // blob URL: same-origin, canvas stays readable
+      await img.decode();
+      const w = img.naturalWidth, h = img.naturalHeight;
+      const k = Math.min(1, size / Math.max(w, h));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(w * k));
+      c.height = Math.max(1, Math.round(h * k));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      return { src: c.toDataURL('image/jpeg', 0.8), w, h };
+    } catch {
+      return null;
+    }
+  }));
+}
+
+// Real image MIME types ('' when unknown): CDN URLs often lack an extension (Shopee `_tn`, Flow).
+// Injected into Flow's tab for its login cookies; the popup calls it directly for other sites.
+export function headTypes(urls) {
+  return Promise.all(urls.map(async (u) => {
+    if (u.startsWith('data:')) return u.slice(5, u.search(/[;,]/));
+    try {
+      const r = await fetch(u, { method: 'HEAD', credentials: 'include' });
+      const type = (r.headers.get('content-type') || '').split(';')[0].trim();
+      return r.ok && type.startsWith('image/') ? type : '';
+    } catch {
+      return '';
+    }
+  }));
+}
+
 // Injected via executeScript — must stay self-contained. Returns absolute URLs in page order.
 export function collectPageImages() {
   const found = new Map();
