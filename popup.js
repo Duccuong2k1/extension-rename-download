@@ -257,8 +257,32 @@ $('cancel').addEventListener('click', () => chrome.runtime.sendMessage({ type: '
 $('links').addEventListener('input', () => ($('link-count').textContent = `${parseLinks($('links').value).length} link hợp lệ`));
 $('base').addEventListener('input', () => { preview(); savePrefs(); });
 $('format').addEventListener('change', savePrefs);
-chrome.runtime.onMessage.addListener((msg) => msg.type === 'progress' && show(msg));
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type !== 'progress') return;
+  show(msg);
+  if (!msg.running && !msg.cancelled && msg.done > msg.failed) maybeInvite().catch(() => {});
+});
 chrome.runtime.sendMessage({ type: 'status' }).then(show);
+
+// Donation invite: only right after a successful run, once the user has 30+ images, then snoozed.
+const DAY = 864e5;
+async function snooze(days) {
+  const { donate = {} } = await chrome.storage.local.get('donate');
+  await chrome.storage.local.set({ donate: { ...donate, snoozeUntil: Date.now() + days * DAY } });
+}
+async function maybeInvite() {
+  const { donate = {} } = await chrome.storage.local.get('donate');
+  if ((donate.total || 0) < 30 || Date.now() < (donate.snoozeUntil || 0)) return;
+  $('donate').hidden = false;
+  await snooze(3);
+}
+$('donate-hide').addEventListener('click', () => { $('donate').hidden = true; snooze(7).catch(() => {}); });
+$('donate-open').addEventListener('click', () => {
+  $('donate').hidden = true;
+  $('donate-dialog').showModal();
+  snooze(15).catch(() => {});
+});
+$('donate-close').addEventListener('click', () => $('donate-dialog').close());
 
 $('start').addEventListener('click', async () => {
   const pasting = $('tab-paste').getAttribute('aria-selected') === 'true';

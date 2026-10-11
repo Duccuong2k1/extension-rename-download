@@ -249,6 +249,41 @@ let proc;
   assert.equal(await fp.textContent('#count'), 'Đã chọn 3 / 3 (ẩn 1)');
   console.log('J filters, shift-click, originals, settings: ok');
 
+  // K: donation invite only after a finished run, once 30+ images were downloaded in total, then snoozed.
+  const dp = await ctx.newPage();
+  await dp.goto(`chrome-extension://${extId}/popup.html?tab=${siteTab}`);
+  await dp.click('#tab-paste');
+  const runOnce = async (name) => {
+    await dp.fill('#links', `${CDN}/${name}.jpg`);
+    await dp.fill('#base', name);
+    await dp.click('#start');
+    await waitFiles(name, 1);
+    await dp.waitForFunction(() => /^Đã tải 1 \/ 1/.test(document.querySelector('#status').textContent));
+    await dp.waitForTimeout(300); // let the invite check settle
+  };
+  await dp.evaluate(() => chrome.storage.local.set({ donate: { total: 0 } }));
+  await runOnce('d1');
+  assert.equal(await dp.isVisible('#donate'), false); // too early
+  await dp.evaluate(() => chrome.storage.local.set({ donate: { total: 29 } }));
+  await runOnce('d2'); // reaches 30
+  assert.equal(await dp.isVisible('#donate'), true);
+  await dp.click('#donate-hide');
+  assert.equal(await dp.isVisible('#donate'), false);
+  const snoozed = (await dp.evaluate(() => chrome.storage.local.get('donate'))).donate;
+  assert.ok(Math.abs(snoozed.snoozeUntil - Date.now() - 7 * 864e5) < 60e3, 'hide snoozes 7 days');
+  await runOnce('d3');
+  assert.equal(await dp.isVisible('#donate'), false); // snoozed
+  await dp.evaluate(() => chrome.storage.local.get('donate').then(({ donate }) => chrome.storage.local.set({ donate: { ...donate, snoozeUntil: 0 } })));
+  await runOnce('d4');
+  assert.equal(await dp.isVisible('#donate'), true);
+  await dp.click('#donate-open');
+  await dp.waitForSelector('#donate-dialog[open]');
+  assert.ok(await dp.$eval('#donate-dialog img', (i) => i.complete && i.naturalWidth > 0), 'QR image loads');
+  assert.match(await dp.textContent('#donate-dialog'), /Vietcombank · DO DUC CUONG/);
+  await dp.click('#donate-close');
+  assert.equal(await dp.isVisible('#donate-dialog'), false);
+  console.log('K donate invite: ok');
+
   console.log('E2E PASS');
   proc.kill(); cdn.close(); site.close();
   process.exit(0);
