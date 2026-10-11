@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tải Ảnh Hàng Loạt – Any website",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Chọn ảnh trên trang hoặc dán link, đổi định dạng, tải về và đổi tên theo thứ tự.",
   "permissions": [
     "downloads",
