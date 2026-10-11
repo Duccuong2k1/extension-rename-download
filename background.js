@@ -78,17 +78,7 @@ async function run(base, urls, tabId, format, fallbacks = []) {
     report();
   }
   status.running = false;
-  await countDownloads(status.done - status.failed); // before report: the popup reads it on "done"
   report();
-}
-
-// Lifetime count of downloaded images; the popup's donation invite waits for a threshold.
-async function countDownloads(n) {
-  if (!n) return;
-  try {
-    const { donate = {} } = await chrome.storage.local.get('donate');
-    await chrome.storage.local.set({ donate: { ...donate, total: (donate.total || 0) + n } });
-  } catch {}
 }
 
 function cancel() {
