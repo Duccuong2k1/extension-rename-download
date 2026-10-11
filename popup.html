@@ -42,6 +42,20 @@
       max-height: 264px; overflow-y: auto; margin-bottom: 12px;
     }
     .grid:empty { display: none; }
+    .grid { user-select: none; } /* shift-click selects a range, not text */
+    .tile[hidden] { display: none; }
+    .filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
+    .filters[hidden] { display: none; }
+    .filters select { width: auto; padding: 3px 8px; border-radius: 999px; font-size: 12px; }
+    #type-filter { display: flex; gap: 6px; }
+    .chip {
+      padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; background: none;
+      color: var(--text); font: inherit; font-size: 12px; cursor: pointer;
+    }
+    .chip[aria-pressed=false] { color: var(--muted); text-decoration: line-through; }
+    .chip:focus-visible { outline: 2px solid var(--accent); }
+    .check { display: flex; gap: 8px; align-items: center; margin: 0 0 12px; font-size: 13px; color: var(--muted); cursor: pointer; }
+    .check input { margin: 0; accent-color: var(--accent); }
     .tile {
       position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden;
       background: var(--surface); cursor: pointer; outline: 2px solid transparent; outline-offset: -2px;
@@ -109,7 +123,18 @@
 
   <section id="panel-page" role="tabpanel" aria-labelledby="tab-page">
     <div class="bar"><span id="count" aria-live="polite">Đang tìm ảnh trên trang…</span><span class="actions"><button class="link" id="sync" hidden title="Quét lại trang để thêm ảnh vừa hiện ra khi cuộn">↻ Cập nhật ảnh</button><button class="link" id="toggle-all" hidden>Bỏ chọn tất cả</button></span></div>
+    <div class="filters" id="filters" hidden>
+      <label for="min-size">Kích thước</label>
+      <select id="min-size">
+        <option value="0">Tất cả</option>
+        <option value="100">≥ 100px</option>
+        <option value="300">≥ 300px</option>
+        <option value="600">≥ 600px</option>
+      </select>
+      <span id="type-filter" role="group" aria-label="Lọc theo định dạng"></span>
+    </div>
     <div class="grid" id="grid"></div>
+    <label class="check"><input type="checkbox" id="hires" checked> Tải ảnh gốc nét nhất (Shopee, Lazada, Tiki, Pinterest)</label>
   </section>
 
   <section id="panel-paste" role="tabpanel" aria-labelledby="tab-paste" hidden>

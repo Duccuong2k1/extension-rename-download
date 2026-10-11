@@ -49,13 +49,20 @@ function waitDone(id) {
 
 const report = () => chrome.runtime.sendMessage({ type: 'progress', ...status }).catch(() => {});
 
-async function run(base, urls, tabId, format) {
+// fallbacks[i]: the URL shown on the page, tried when the full-size original (urls[i]) fails.
+async function run(base, urls, tabId, format, fallbacks = []) {
   const my = ++runId;
   status = { done: 0, failed: 0, total: urls.length, running: true };
   report();
   for (const [i, url] of urls.entries()) {
     try {
-      const result = await getImage(url, format, tabId);
+      let result;
+      try {
+        result = await getImage(url, format, tabId);
+      } catch (e) {
+        if (!fallbacks[i] || my !== runId) throw e;
+        result = await getImage(fallbacks[i], format, tabId);
+      }
       if (my !== runId) return;
       const name = fileName(base, i + 1, urls.length, extFromMime(result.mime));
       const id = (currentDownload = await chrome.downloads.download({ url: result.blobUrl, filename: `${base}/${name}`, conflictAction: 'uniquify' }));
@@ -87,7 +94,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   if (msg.type === 'cancel') { cancel(); reply({ ok: true }); }
   if (msg.type === 'start') {
     if (status?.running) return reply({ error: 'Đang tải, vui lòng đợi.' });
-    run(msg.base, msg.urls, msg.tabId, msg.format || 'keep');
+    run(msg.base, msg.urls, msg.tabId, msg.format || 'keep', msg.fallbacks);
     reply({ ok: true });
   }
 });

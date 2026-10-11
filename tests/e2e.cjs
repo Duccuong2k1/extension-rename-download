@@ -10,6 +10,7 @@ const CHROME = process.env.CHROME || path.join(process.env.LOCALAPPDATA, 'ms-pla
 
 const JPG = Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=', 'base64');
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+const svg = (n) => `<svg xmlns="http://www.w3.org/2000/svg" width="${n}" height="${n}"><rect width="${n}" height="${n}" fill="#58f"/></svg>`;
 const isPng = (b) => b.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
 
 const FLOW_N = 5;
@@ -42,6 +43,15 @@ let proc;
         <img id="cross" src="${CDN}/cross.png" width="200" height="200">
       </body>`);
     }
+    if (req.url === '/shop') {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      return res.end(`<!doctype html><body>
+        <img src="/big.svg" style="display:block"><img src="/icon.svg" style="display:block">
+        <img src="https://down-vn.img.susercontent.com/file/AAA_tn" style="display:block">
+        <img src="https://down-vn.img.susercontent.com/file/BBB_tn" style="display:block">
+      </body>`);
+    }
+    if (req.url.endsWith('.svg')) { res.writeHead(200, { 'content-type': 'image/svg+xml' }); return res.end(svg(req.url === '/icon.svg' ? 80 : 400)); }
     res.writeHead(200, { 'content-type': req.url.endsWith('.png') ? 'image/png' : 'image/jpeg' });
     res.end(req.url.endsWith('.png') ? PNG : JPG);
   });
@@ -185,12 +195,59 @@ let proc;
   // I: Flow thumbnails need the login cookie, so the popup grid must still show them.
   const flowPop = await ctx.newPage();
   await flowPop.goto(`chrome-extension://${extId}/popup.html?tab=${flowTab}`);
+  assert.equal(await flowPop.getAttribute('#tab-paste', 'aria-selected'), 'true'); // H left the paste tab open: remembered
+  await flowPop.click('#tab-page');
   await flowPop.waitForFunction((n) => document.querySelectorAll('#grid .tile').length === n, FLOW_N);
   await flowPop.waitForFunction(() => [...document.querySelectorAll('#grid img')].every((i) => i.complete && i.src), null, { timeout: 15000 });
   assert.deepEqual(await flowPop.$$eval('#grid img', (imgs) => imgs.map((i) => i.naturalWidth > 0)), Array(FLOW_N).fill(true));
   await flowPop.waitForFunction(() => document.querySelector('#format-hint').textContent);
   assert.match(await flowPop.textContent('#format-hint'), /^Ảnh trên trang: JPG 3 · PNG 2\./); // types of the =d originals, via the tab's cookies
   console.log('I flow thumbnails: ok');
+
+  // J: filters, shift-click ranges, full-size originals with fallback, remembered settings.
+  await ctx.route('https://down-vn.img.susercontent.com/**', (route) => {
+    const u = route.request().url();
+    if (u.endsWith('_tn')) return route.fulfill({ contentType: 'image/svg+xml', body: svg(320) });
+    if (u.endsWith('/file/AAA')) return route.fulfill({ contentType: 'image/png', body: PNG });
+    route.fulfill({ status: 404 }); // BBB's original is gone: download must fall back to BBB_tn
+  });
+  const shop = await ctx.newPage();
+  await shop.goto(SITE + '/shop');
+  const shopTab = await tabIdOf(SITE + '/shop');
+  const fp = await ctx.newPage();
+  await fp.goto(`chrome-extension://${extId}/popup.html?tab=${shopTab}`);
+  await fp.waitForFunction(() => document.querySelectorAll('#grid .tile').length === 4);
+  await fp.waitForFunction(() => [...document.querySelectorAll('#grid .dim')].every((d) => d.textContent));
+  assert.match(await fp.textContent('#grid .tile:nth-child(3) .dim'), /320×320 → gốc/);
+  await fp.selectOption('#min-size', '100'); // hides the 80px icon
+  assert.equal(await fp.textContent('#count'), 'Đã chọn 3 / 3 (ẩn 1)');
+  await fp.waitForSelector('#type-filter button:text("PNG")');
+  await fp.click('#type-filter button:text("PNG")'); // hides AAA, whose original is a PNG
+  assert.equal(await fp.textContent('#count'), 'Đã chọn 2 / 2 (ẩn 2)');
+  await fp.click('#type-filter button:text("PNG")');
+  // Visible: big, AAA, BBB. Click big, shift-click BBB: the whole range follows (unticked).
+  await fp.click('#grid .tile:nth-child(1)');
+  await fp.click('#grid .tile:nth-child(4)', { modifiers: ['Shift'] });
+  assert.equal(await fp.textContent('#count'), 'Đã chọn 0 / 3 (ẩn 1)');
+  await fp.click('#grid .tile:nth-child(1)');
+  await fp.click('#grid .tile:nth-child(4)', { modifiers: ['Shift'] });
+  assert.equal(await fp.textContent('#count'), 'Đã chọn 3 / 3 (ẩn 1)');
+  assert.equal(await fp.isChecked('#grid .tile:nth-child(2) input'), true); // hidden icon untouched by the range
+  await fp.fill('#base', 'shop');
+  await fp.selectOption('#format', 'keep');
+  await fp.click('#start');
+  const shopFiles = await waitFiles('shop', 3);
+  assert.deepEqual(shopFiles, ['shop-001.svg', 'shop-002.png', 'shop-003.svg']); // hidden icon not downloaded
+  assert.ok(isPng(fs.readFileSync(path.join(dl, 'shop', 'shop-002.png'))), 'AAA should come from its full-size original');
+  // Settings survive reopening the popup.
+  await fp.uncheck('#hires');
+  await fp.reload();
+  await fp.waitForFunction(() => document.querySelectorAll('#grid .tile').length === 4);
+  assert.equal(await fp.inputValue('#base'), 'shop');
+  assert.equal(await fp.inputValue('#min-size'), '100');
+  assert.equal(await fp.isChecked('#hires'), false);
+  assert.equal(await fp.textContent('#count'), 'Đã chọn 3 / 3 (ẩn 1)');
+  console.log('J filters, shift-click, originals, settings: ok');
 
   console.log('E2E PASS');
   proc.kill(); cdn.close(); site.close();

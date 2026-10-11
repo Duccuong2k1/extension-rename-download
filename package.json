@@ -1,5 +1,5 @@
 {
   "private": true,
   "type": "module",
-  "scripts": { "test": "node naming.test.js", "test:e2e": "node tests/e2e.cjs" }
+  "scripts": { "test": "node naming.test.js && node hires.test.js", "test:e2e": "node tests/e2e.cjs" }
 }
