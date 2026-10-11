@@ -1,5 +1,6 @@
 // Self-contained: injected into pages via executeScript and imported by offscreen.js.
-export async function fetchImage(url, format) {
+// rawForConvert: hand back the bytes as a data URL instead of converting here (see getImage).
+export async function fetchImage(url, format, rawForConvert = false) {
   const res = await fetch(url, { credentials: 'include' });
   let blob = await res.blob();
   if (res.ok && !blob.type.startsWith('image/')) {
@@ -12,6 +13,10 @@ export async function fetchImage(url, format) {
   }
   if (!res.ok || !blob.type.startsWith('image/')) throw new Error(`HTTP ${res.status} ${blob.type || 'unknown'}`);
   const target = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' }[format];
+  if (target && target !== blob.type && rawForConvert) {
+    const dataUrl = await new Promise((ok, fail) => Object.assign(new FileReader(), { onload: (e) => ok(e.target.result), onerror: fail }).readAsDataURL(blob));
+    return { dataUrl };
+  }
   if (target && target !== blob.type) {
     // ponytail: animated GIF/WebP keep only the first frame when converted.
     const src = URL.createObjectURL(blob);

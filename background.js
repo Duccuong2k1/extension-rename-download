@@ -11,11 +11,14 @@ async function ensureOffscreen() {
 }
 
 // In the tab first (site cookies, e.g. Flow login); else from the extension origin (no CORS limits).
+// Format conversion always runs in the offscreen document: once the user switches away, Chrome
+// throttles the tab's renderer and encoding there gets 5-6x slower.
 async function getImage(url, format, tabId) {
   if (tabId != null) {
     try {
-      const [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, func: fetchImage, args: [url, format] });
-      if (result) return result;
+      const [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, func: fetchImage, args: [url, format, true] });
+      if (result?.dataUrl) url = result.dataUrl;
+      else if (result) return result;
     } catch {} // unscriptable tab: fall through
   }
   await ensureOffscreen();
