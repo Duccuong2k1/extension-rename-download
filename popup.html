@@ -45,6 +45,7 @@
     .actions { display: flex; gap: 14px; }
     .grid {
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+      grid-auto-rows: max-content; /* Safari otherwise shrinks auto rows to fit max-height and tiles overlap */
       max-height: 264px; overflow-y: auto; margin-bottom: 12px;
     }
     .grid:empty { display: none; }
